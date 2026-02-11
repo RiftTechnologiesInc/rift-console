@@ -1,32 +1,73 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase'
+import { useTenant } from '@/lib/useTenant'
 import Card from '@/components/Card'
 import Badge from '@/components/Badge'
 import { formatDateTime, getStatusVariant } from '@/lib/utils'
 
 export default function ClientDetailPage() {
   const params = useParams()
+  const router = useRouter()
   const clientId = params.id as string
+  const { tenantId, loading: tenantLoading, hasTenant } = useTenant()
 
   const [client, setClient] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    if (!tenantLoading && !hasTenant) {
+      router.push('/connect-salesforce')
+    }
+  }, [tenantLoading, hasTenant, router])
+
+  useEffect(() => {
     async function fetchClient() {
       try {
-        const { data, error } = await supabase
-          .from('clients')
-          .select('*, advisors(*)')
-          .eq('id', clientId)
-          .single()
+        if (!tenantId || !clientId) return
 
-        if (error) throw error
-        setClient(data)
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:3001'
+        const apiKey = process.env.NEXT_PUBLIC_API_KEY || 'pgsf/7JPlPoOdKPHx+/EMxmxjjxDuk8jPhfwSAiqTTM='
+
+        const response = await fetch(`${backendUrl}/clients`, {
+          headers: {
+            'x-api-key': apiKey,
+            'x-tenant-id': tenantId,
+          },
+        })
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch client list')
+        }
+
+        const clients = await response.json()
+        const match = (clients || []).find((item: any) => item.id === clientId)
+
+        if (!match) {
+          setClient(null)
+          return
+        }
+
+        const fullName = match.name || ''
+        const firstName = fullName.split(' ')[0] || fullName || 'Unknown'
+        const lastName = fullName.split(' ').slice(1).join(' ') || ''
+
+        setClient({
+          id: match.id,
+          first_name: firstName,
+          last_name: lastName,
+          email: match.email || 'N/A',
+          phone: match.phone || null,
+          status: 'active',
+          advisors: null,
+          external_id: match.externalId || match.id,
+          created_at: match.createdAt || match.createdDate || null,
+          updated_at: match.lastModifiedDate || match.updatedAt || null,
+          metadata: match,
+        })
       } catch (err: any) {
         setError(err.message)
       } finally {
@@ -34,10 +75,10 @@ export default function ClientDetailPage() {
       }
     }
 
-    if (clientId) {
+    if (tenantId && clientId) {
       fetchClient()
     }
-  }, [clientId])
+  }, [tenantId, clientId])
 
   if (loading) {
     return (
@@ -51,7 +92,7 @@ export default function ClientDetailPage() {
     return (
       <div>
         <Link href="/clients" className="text-blue-600 hover:text-blue-800 mb-4 inline-block">
-          ← Back to Clients
+          {'<- Back to Clients'}
         </Link>
         <Card>
           <div className="text-center py-8">
@@ -65,7 +106,7 @@ export default function ClientDetailPage() {
   return (
     <div>
       <Link href="/clients" className="text-blue-600 hover:text-blue-800 mb-4 inline-block">
-        ← Back to Clients
+        {'<- Back to Clients'}
       </Link>
 
       <div className="mb-8">
@@ -126,11 +167,11 @@ export default function ClientDetailPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-500 mb-1">Created</label>
-              <p className="text-gray-900">{formatDateTime(client.created_at)}</p>
+              <p className="text-gray-900">{client.created_at ? formatDateTime(client.created_at) : 'N/A'}</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-500 mb-1">Last Updated</label>
-              <p className="text-gray-900">{formatDateTime(client.updated_at)}</p>
+              <p className="text-gray-900">{client.updated_at ? formatDateTime(client.updated_at) : 'N/A'}</p>
             </div>
           </div>
         </Card>
@@ -157,3 +198,5 @@ export default function ClientDetailPage() {
     </div>
   )
 }
+
+
