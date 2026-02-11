@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabase'
+import { useRouter } from 'next/navigation'
+import { useTenant } from '@/lib/useTenant'
 import StatCard from '@/components/StatCard'
 import { formatRelativeTime } from '@/lib/utils'
 
@@ -14,22 +15,32 @@ type DashboardData = {
 }
 
 export default function DashboardPage() {
+  const router = useRouter()
+  const { tenantId, loading: tenantLoading, hasTenant } = useTenant()
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // Redirect to connect page if user has no tenant
   useEffect(() => {
+    if (!tenantLoading && !hasTenant) {
+      router.push('/connect-salesforce')
+    }
+  }, [tenantLoading, hasTenant, router])
+
+  useEffect(() => {
+    if (!tenantId) return // Wait for tenant to load
+
     async function fetchDashboardData() {
       try {
         const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:3001'
-        const tenantId = '25323fc0-fa21-41c0-b899-343b8eaa16a0' // TODO: Get from auth context
         const apiKey = 'pgsf/7JPlPoOdKPHx+/EMxmxjjxDuk8jPhfwSAiqTTM='
 
         // Fetch tenant info from Salesforce API
         const tenantInfoResponse = await fetch(`${backendUrl}/tenants/${tenantId}/info`, {
           headers: {
             'x-api-key': apiKey,
-            'x-tenant-id': tenantId
+            'x-tenant-id': tenantId as string
           }
         })
 
@@ -39,7 +50,7 @@ export default function DashboardPage() {
         const clientsResponse = await fetch(`${backendUrl}/clients`, {
           headers: {
             'x-api-key': apiKey,
-            'x-tenant-id': tenantId
+            'x-tenant-id': tenantId as string
           }
         })
 
@@ -49,14 +60,17 @@ export default function DashboardPage() {
         const srResponse = await fetch(`${backendUrl}/service-requests`, {
           headers: {
             'x-api-key': apiKey,
-            'x-tenant-id': tenantId
+            'x-tenant-id': tenantId as string
           }
         })
 
         const serviceRequests = srResponse.ok ? await srResponse.json() : []
 
+        // Get tenant name from instance URL or use tenant_id
+        const tenantName = tenantInfo?.organizationId || (tenantId as string).substring(0, 15)
+
         setData({
-          tenant: { name: 'Rift IRA' },
+          tenant: { name: tenantName },
           advisorCount: 0, // Salesforce doesn't have advisors - this is a Rift concept
           clientCount: clients.length,
           integrationCount: 1, // This tenant has 1 Salesforce integration
@@ -71,7 +85,7 @@ export default function DashboardPage() {
     }
 
     fetchDashboardData()
-  }, [])
+  }, [tenantId])
 
   if (loading) {
     return (

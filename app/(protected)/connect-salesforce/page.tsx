@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { supabase } from '@/lib/supabase'
 import Card from '@/components/Card'
 
 export default function ConnectSalesforcePage() {
@@ -15,9 +16,18 @@ export default function ConnectSalesforcePage() {
 
     setConnecting(true)
 
-    // Redirect to backend OAuth start endpoint
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:3000'
-    window.location.href = `${backendUrl}/oauth/salesforce/start?tenantId=${encodeURIComponent(tenantId.trim())}`
+    // Get current user's ID to link the tenant to them
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+
+    if (userError || !user) {
+      alert('Not authenticated. Please log in again.')
+      setConnecting(false)
+      return
+    }
+
+    // Redirect to backend OAuth start endpoint with user ID
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:3001'
+    window.location.href = `${backendUrl}/oauth/salesforce/start?tenantId=${encodeURIComponent(tenantId.trim())}&userId=${user.id}`
   }
 
   return (

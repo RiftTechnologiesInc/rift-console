@@ -1,29 +1,40 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase'
+import { useTenant } from '@/lib/useTenant'
 import Card from '@/components/Card'
 import Badge from '@/components/Badge'
 import EmptyState from '@/components/EmptyState'
 import { getStatusVariant } from '@/lib/utils'
 
 export default function ClientsPage() {
+  const router = useRouter()
+  const { tenantId, loading: tenantLoading, hasTenant } = useTenant()
   const [clients, setClients] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // Redirect to connect page if user has no tenant
   useEffect(() => {
+    if (!tenantLoading && !hasTenant) {
+      router.push('/connect-salesforce')
+    }
+  }, [tenantLoading, hasTenant, router])
+
+  useEffect(() => {
+    if (!tenantId) return // Wait for tenant to load
+
     async function fetchClients() {
       try {
         // Query backend API which fetches from Salesforce
         const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:3001'
-        const tenantId = '25323fc0-fa21-41c0-b899-343b8eaa16a0' // TODO: Get from auth context
 
         const response = await fetch(`${backendUrl}/clients`, {
           headers: {
             'x-api-key': 'pgsf/7JPlPoOdKPHx+/EMxmxjjxDuk8jPhfwSAiqTTM=',
-            'x-tenant-id': tenantId
+            'x-tenant-id': tenantId as string
           }
         })
 
@@ -49,7 +60,7 @@ export default function ClientsPage() {
     }
 
     fetchClients()
-  }, [])
+  }, [tenantId])
 
   if (loading) {
     return (

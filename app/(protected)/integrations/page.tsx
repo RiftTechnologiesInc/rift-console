@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase'
 import Card from '@/components/Card'
 import Badge from '@/components/Badge'
 import EmptyState from '@/components/EmptyState'
-import { formatDate, formatRelativeTime, getStatusVariant } from '@/lib/utils'
+import { formatDate, formatRelativeTime } from '@/lib/utils'
 
 export default function IntegrationsPage() {
   const [integrations, setIntegrations] = useState<any[]>([])
@@ -15,13 +15,35 @@ export default function IntegrationsPage() {
   useEffect(() => {
     async function fetchIntegrations() {
       try {
+        // Get current user
+        const { data: { user }, error: userError } = await supabase.auth.getUser()
+
+        if (userError || !user) {
+          setError('Not authenticated')
+          setLoading(false)
+          return
+        }
+
+        // Query salesforce_tenants for current user
         const { data, error } = await supabase
-          .from('integrations')
-          .select('*, tenants(name)')
-          .order('created_at', { ascending: false })
+          .from('salesforce_tenants')
+          .select('tenant_id, instance_url, issued_at')
+          .eq('user_id', user.id)
+          .order('issued_at', { ascending: false })
 
         if (error) throw error
-        setIntegrations(data || [])
+
+        // Transform to integration format
+        const transformedData = (data || []).map(item => ({
+          id: item.tenant_id,
+          type: 'Salesforce',
+          status: 'active',
+          last_sync_at: item.issued_at,
+          created_at: item.issued_at,
+          instance_url: item.instance_url
+        }))
+
+        setIntegrations(transformedData)
       } catch (err: any) {
         setError(err.message)
       } finally {
@@ -98,7 +120,7 @@ export default function IntegrationsPage() {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <Badge variant={getStatusVariant(integration.status)}>
+                        <Badge variant="success">
                           {integration.status}
                         </Badge>
                       </td>
